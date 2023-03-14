@@ -1,0 +1,718 @@
+---
+title: "Assessment3- vgsales Case Study and Data Analysis"
+author: 'Zahra Ahmadpour(a1863476)'
+date: "04/12/2022"
+output:
+  html_document: default
+  word_document: default
+---
+
+
+
+### 1. Data cleaning:
+#### 1.1. Load the dataset, make a data dictionary and skim the data:
+In this part I load the affair data set using the read_csv function, then I make a data dictionary using build_linker and mutate functions. At last I use the 'Chinese' as a locale in set.locale function to show the hist column in skim's tables, then I used the skim function to get the more information about the data set. 
+
+```{r}
+# load the libraries
+pacman::p_load(modelr,lubridate,DT,tidyr,stringr,tidyverse,lubridate,
+               caret,mlbench,inspectdf,readr,nycflights13,moments, 
+               correlation,Hmisc,car, forecast,knitr,glmx ,skimr,
+               titanic, tidymodels,ISLR,vip,glmnet,readr,sys,vip,
+               glmnet,ISLR,ranger,ggplot2,cowplot)
+
+# read the csv file:
+vgsales  <- read_csv (file ='F:/vgsales.csv')
+
+# Make a data dictionary
+library(dataMeta)
+var_desc <- c("The games name", "Platform of the games release (i.e. PC,PS4, etc.)", 
+              "Year of the game's release", "Genre of the game",
+              "Publisher of the game", "Sales in North America (in million)",
+              "Sales in Europe (in million)", "Sales in Japan (in million)",
+              "Sales in the rest of the world (in million)")
+var_type=c(1,1,1,1,1,0,0,0,0)
+data.dictionary <- build_linker(vgsales, variable_description = var_desc, 
+                                variable_type = var_type)
+data.dictionary <- data.dictionary %>%
+  mutate(var_type=c('Factor','Factor','Date','Factor',
+                    'Factor','Numeric','Numeric','Numeric','Numeric'))
+  
+kable(data.dictionary, caption = "Table 1. Data dictionary for vgsales dataset")
+
+# skim the data
+Sys.setlocale(locale='Chinese')# change the font to show the hist in skim
+skim(vgsales)
+```
+
+The **aim** is to build a predictive models: lasso regression and random forest that will give the most accurate prediction of how many copies of the Fatal Empire can be expected to sell in North America, Then **the outcome variable** is **NA_Sales** and **the predictor variables** are **other variables except NA_Sales**, that are include **Name, Platform, Year, Genre,  Publisher, EU_Sales, JP_Sales and Other_Sales**.
+
+
+Based on 'n-missing' column in 'variable type' tables, **there isn't any missing data** in our data set.
+
+**We have 16598 observations on 9 variables(column)**so, we have **16598*9=149382 observations in total**.
+
+**The 'Year' variable incorrectly read as character but it should be date type**. Other variables are in correct types but I prefer the character variables in factor type.
+
+The **'Name' variable** is just ID column and it is **not informative**.
+
+#### 1.2. The plots of key variables to explore the data:
+I investigate the numeric variables, Platform and Genre to see if something wrong is going on.
+
+#### 1.2a. The histogram of sales in Europe:
+I show the histogram of Europe sales (in millions) by ggplot, geom_histogram ans plot_grid functions.
+
+```{r}
+vg_eu <- ggplot(data = vgsales, mapping = aes(x = EU_Sales)) +
+  geom_histogram(bins = 80, fill = "#00CED1", color = "#7FFF00") +
+  xlab("Europe sales (millions)") +
+  ylab("count") +
+  ggtitle("Figure 1. The histogram of Europe sales ") +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(size = 12, hjust = .5, face = "bold"),
+    axis.title.x = element_text(size = 12, hjust = .5, face = "italic"),
+    axis.title.y = element_text(size = 12, hjust = .5, face = "italic"),
+    axis.text.x = element_text(size = 10, face = "bold"),
+    axis.text.y = element_text(size = 10, face = "bold"),
+    legend.position = "none")
+plot_grid( vg_eu, nrow = 1, ncol = 1)
+
+vg_eu_2 <- ggplot(data = vgsales[vgsales$EU_Sales < 2.5, ], mapping = aes(x = EU_Sales)) +
+  geom_histogram(bins = 80, fill = "#00CED1", color = "#7FFF00") +
+  xlab("Europe sales (millions)") +
+  ylab("count") +
+  ggtitle("Figure 1.1. The histogram of Europe sales less than 2.5 millions") +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(size = 12, hjust = .5, face = "bold"),
+    axis.title.x = element_text(size = 12, hjust = .5, face = "italic"),
+    axis.title.y = element_text(size = 12, hjust = .5, face = "italic"),
+    axis.text.x = element_text(size = 10, face = "bold"),
+    axis.text.y = element_text(size = 10, face = "bold"),
+    legend.position = "none")
+plot_grid( vg_eu_2, nrow = 1, ncol = 1)
+```
+
+As we can see, the shape is right skewed so, there are a lot of games with sales zero and 0.01 millions and there are a few games with sales more than 2.5 millions and thre is one outlier in sales 10.22 millions.
+
+#### 1.2b. The histogram of sales in Japan:
+I show the histogram of Japan sales (in millions) by ggplot, geom_histogram ans plot_grid functions.
+
+```{r}
+# A histogram of Japan sales
+vg_jp <- ggplot(data = vgsales, mapping = aes(x = JP_Sales)) +
+  geom_histogram(bins = 80, fill = "#00CED1", color = "#7FFF00") +
+  xlab("Japan Sales (millions)") +
+  ylab("") +
+  ggtitle("Figure 2. The histogram of Japan sales") +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(size = 12, hjust = .5, face = "bold"),
+    axis.title.x = element_text(size = 12, hjust = .5, face = "italic"),
+    axis.title.y = element_text(size = 12, hjust = .5, face = "italic"),
+    axis.text.x = element_text(size = 10, face = "bold"),
+    axis.text.y = element_text(size = 10, face = "bold"),
+    legend.position = "none")
+plot_grid( vg_jp, nrow = 1, ncol = 1)
+# a histogram of japan sales less than 2.5 millions
+vg_jp_2 <- ggplot(data = vgsales[vgsales$JP_Sales < 2.5, ], mapping = aes(x = JP_Sales)) +
+  geom_histogram(bins = 80, fill = "#00CED1", color = "#7FFF00") +
+  xlab("Japan sales (millions)") +
+  ylab("") +
+  ggtitle("Figure 2.1.The histogram of Japan sales less than 2.5 millions") +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(size = 12, hjust = .5, face = "bold"),
+    axis.title.x = element_text(size = 12, hjust = .5, face = "italic"),
+    axis.title.y = element_text(size = 12, hjust = .5, face = "italic"),
+    axis.text.x = element_text(size = 10, face = "bold"),
+    axis.text.y = element_text(size = 10, face = "bold"),
+    legend.position = "none")
+plot_grid( vg_jp_2, nrow = 1, ncol = 1)
+```
+
+As we can see, the shape is right skewed so, there are a lot of games with sales zero and 0.01 millions and there are a few games with sales more than 2.5 millions and there is one outlier in sales 10.57 millions.
+
+#### 1.2c. The histogram of sales in Other countries:
+I show the histogram of Other countries sales (in millions) by ggplot, geom_histogram ans plot_grid functions.
+
+```{r}
+#1.2c
+# A histogram of Other countries sales
+vg_oth <- ggplot(data = vgsales, mapping = aes(x = Other_Sales)) +
+  geom_histogram(bins = 80, fill = "#00CED1", color = "#7FFF00") +
+  xlab("Other countries Sales (millions)") +
+  ylab("") +
+  ggtitle("Figure 3. The histogram of Other countries sales") +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(size = 12, hjust = .5, face = "bold"),
+    axis.title.x = element_text(size = 12, hjust = .5, face = "italic"),
+    axis.title.y = element_text(size = 12, hjust = .5, face = "italic"),
+    axis.text.x = element_text(size = 10, face = "bold"),
+    axis.text.y = element_text(size = 10, face = "bold"),
+    legend.position = "none")
+plot_grid( vg_oth, nrow = 1, ncol = 1)
+# a histogram of other countries sales less than 2.5 millions
+vg_oth_2 <- ggplot(data = vgsales[vgsales$Other_Sales < 2.5, ], mapping = aes(x =Other_Sales)) +
+  geom_histogram(bins = 80, fill = "#00CED1", color = "#7FFF00") +
+  xlab("Other countries sales (millions)") +
+  ylab("") +
+  ggtitle("Figure 3.1. The histogram of Other countries sales less than 2.5 millions") +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(size = 12, hjust = .5, face = "bold"),
+    axis.title.x = element_text(size = 12, hjust = .5, face = "italic"),
+    axis.title.y = element_text(size = 12, hjust = .5, face = "italic"),
+    axis.text.x = element_text(size = 10, face = "bold"),
+    axis.text.y = element_text(size = 10, face = "bold"),
+    legend.position = "none")
+plot_grid( vg_oth_2, nrow = 1, ncol = 1)
+```
+
+As we can see, the shape is right skewed so, there are a lot of games with sales zero and 0.01 millions and there are a few games with sales more than 2.5 millions and there is one outlier in sales 29.02 millions.
+
+#### 1.2d. The Bar plot of Year variable:
+I show the bar plot of Year variable, using the ggplot and geom_bar variables.
+
+```{r}
+vgsales %>%
+  ggplot(aes(x=Year))+
+  geom_bar()+
+  labs(y='Year', caption = "Figure 4. Bar plot of Year of vgsales data set")+
+  theme(plot.caption = element_text(hjust = 0, size = 18))
+```
+
+As we can see, the shape is symmetric and there are most observations in years 2008 and 2009 and there are a few observations after 2016 that shows if we keep year variable in our prediction model it will affect the model more than what it should,  Then I will prefer to remove it from the model.  
+
+#### 1.2d. The histogram of sales in North America (outcome variable):
+I show the histogram of North America sales (in millions) by ggplot, geom_histogram ans plot_grid functions. 
+
+```{r}
+#1.2d
+# A histogram of North America sales
+vg_jp <- ggplot(data = vgsales, mapping = aes(x = NA_Sales)) +
+  geom_histogram(bins = 80, fill = "#00CED1", color = "#7FFF00") +
+  xlab("North America Sales (millions)") +
+  ylab("") +
+  ggtitle("Figure 5. The histogram of North America sales") +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(size = 12, hjust = .5, face = "bold"),
+    axis.title.x = element_text(size = 12, hjust = .5, face = "italic"),
+    axis.title.y = element_text(size = 12, hjust = .5, face = "italic"),
+    axis.text.x = element_text(size = 10, face = "bold"),
+    axis.text.y = element_text(size = 10, face = "bold"),
+    legend.position = "none")
+plot_grid( vg_jp, nrow = 1, ncol = 1)
+# a histogram of North America sales less than 2.5 millions
+vg_jp_2 <- ggplot(data = vgsales[vgsales$NA_Sales < 2.5, ], mapping = aes(x =NA_Sales)) +
+  geom_histogram(bins = 80, fill = "#00CED1", color = "#7FFF00") +
+  xlab("North America sales (millions)") +
+  ylab("") +
+  ggtitle("Figure 5.1. The histogram of North America sales less than 2.5 millions") +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(size = 12, hjust = .5, face = "bold"),
+    axis.title.x = element_text(size = 12, hjust = .5, face = "italic"),
+    axis.title.y = element_text(size = 12, hjust = .5, face = "italic"),
+    axis.text.x = element_text(size = 10, face = "bold"),
+    axis.text.y = element_text(size = 10, face = "bold"),
+    legend.position = "none")
+plot_grid( vg_jp_2, nrow = 1, ncol = 1)
+```
+
+As we can see, the shape is right skewed so, there are a lot of games with sales zero and 0.01 millions and there are a few games with sales more than 2.5 millions. and there are some outlier in sales more than 20 millions.
+
+#### 1.2e. The Bar plot of Genre variable:
+I show the bar plot of Genre variable, using the ggplot and geom_bar variables.
+
+```{r}
+vgsales %>%
+  dplyr::count('Genre')
+
+vgsales %>%
+  ggplot(aes(x=fct_infreq(Genre) ))+
+  geom_bar()+
+  labs(y= 'Genre' ,caption = "Figure 6. Bar plot of Genre of vgsales data set")+
+  theme(plot.caption = element_text(hjust = 0, size = 12))
+```
+
+The Action, Sport, Misc and Role playing are the most important genre in the data set.
+
+#### 1.3. The tables of Publisher and Platform:
+I check the number of unique values of 'Platform' and 'Publisher' variables then I produce the sorted tables of them using the count and kable functions and I show the 20 rows of them.
+
+```{r}
+# data table of platform
+length(unique(vgsales$Platform))
+plat_table<- vgsales %>%
+  dplyr::count(Platform,sort=T)
+kable(head(plat_table,20), 
+           caption = "Table 2. Data table of the most 20 'Platform' for vgsales dataset")
+
+#data table of publisher
+length(unique(vgsales$Publisher))
+pub_table<- vgsales %>%
+  dplyr::count(Publisher,sort=T)
+kable(head(pub_table,20),caption = "Table 3. Data table of the most 20 'Publisher' for vgsales dataset")
+
+```
+
+Based on the table of 'Platform' variable, the most popular platforms are 'DS', 'PS2', 'Wii' and 'X360' and there are 31 unique platform.
+
+The most popular publishers are 'Electronic Arts', 'Activision', 'Namco Bandai Games', 'Ubisoft' and 'Konami Digital Entertainment'in vgsales data set and there are 579 unique publisher that it will lead to over fitting in our prediction model, then I will remove it in next steps.
+
+#### 1.4. Change the variables type: 
+I convert the character variables (Name, Platform, Publisher, Year, Genre) to factor using the mutate and as.factor functions then I use the head and kable functions to show the type of variables.
+
+```{r}
+vgsales <- vgsales %>%
+  dplyr::mutate(Year= as.factor(Year),
+         Name=as.factor(Name),
+         Platform=as.factor(Platform),
+         Genre=as.factor(Genre),
+         Publisher=as.factor(Publisher),
+         NA_Sales=as.numeric(NA_Sales),
+         EU_Sales=as.numeric(EU_Sales),
+         JP_Sales=as.numeric(JP_Sales),
+         Other_Sales=as.numeric(Other_Sales))
+kable(head(vgsales),caption = "Table 4. Data table of vgsales dataset")
+```
+
+We can see that, Year, Name, Platform , Publisher and Genre red in factor type also NA_Sale, EU_Sales, JP_Sales and Other_Sales red in numeric type. Just I did not change the Year type to date because it leads to add month and day to this variable.
+
+#### 1.5. Identify the variables that lead to over fitting: 
+Based on 579 unique **Publisher** that it will lead to **over fitting** in our prediction model, then I will remove it of the data set. Also **Name** variable is just an **ID** column and it is **not informative** then should be removed from the model but I keep it now and will remove it before fitting the model. Also as we can see in **Year** bar plot, There are most of observations in years 1996-2016 and there are a few observations after 2016 that maybe it is related to times that data set was collected and it will **affect our model predicting more than what it should** and it is **not informative** in our model, then I will remove it from the data set.  
+
+#### 1.6. Removing the Publisher and Platform variables and skim the data:
+I remove the 'Year' and 'Publisher' variables by using select function to select the variables except them, Also, I skim the data to check the changes applied on data.
+
+```{r}
+vgsales <- vgsales%>%
+  dplyr::select(-Publisher,-Year)
+skim(vgsales)
+```
+
+As we can see in the output of the skim of data, Publisher and Year variables removed from data set and all variables red in correct type.
+
+### 2. Exploratory data analysis (EDA):
+#### 2.1. Set the seed:
+In this part, I investigate the data set to discover hidden patterns, outliers[1] by generating Parallel-cordinate plot, to discover the data better.
+
+```{r}
+set.seed(1234)
+```
+
+#### 2.2. Parallel-cordinates plot:
+I produce the Parallel-cordinate plot using pivot-longer function to receive the wide format for numerical variables then I use the ggplot and geom_line functions.
+
+```{r}
+#parallel-cordinates plot 
+vgsales %>% 
+  pivot_longer(cols=NA_Sales:Other_Sales)%>% 
+  ggplot(aes(x=name, y=value))+
+  geom_line(aes(group=Name))+
+  labs(caption = "Figure 4: Parallel coordinate plot of the vgsales data.")+
+  theme(plot.caption = element_text(hjust = 0, size = 14))
+#parallel-cordinates plot colored by genre
+vgsales %>% 
+  pivot_longer(cols=NA_Sales:Other_Sales)%>% 
+  ggplot(aes(x=name, y=value,colour=Genre))+
+  geom_line(aes(group=Name))+
+  labs(caption = "Figure 4.1: Parallel coordinate plot of the vgsales data group by Genre.")+
+  theme(plot.caption = element_text(hjust = 0, size = 14))
+#parallel-cordinates plot colored by platform
+vgsales %>% 
+  pivot_longer(cols=NA_Sales:Other_Sales)%>% 
+  ggplot(aes(x=name, y=value,colour=Platform))+
+  geom_line(aes(group=Name))+
+  labs(caption = "Figure 4.2: Parallel coordinate plot of the vgsales data group by Platform.")+
+  theme(plot.caption = element_text(hjust = 0, size = 14))
+```
+
+It doesn't look like any specific separation or clustering in data. For sure, I colored the Parallel-cordinates plot by Genre and Platform variables using colour argument in ggplot, I find so there is not any obvious cluster in data.
+
+#### 2.3. Pricipal component analysis (PCA): 
+In this part I check the PCA, to see the possibility of reducing dimension and break up the data to the most popular variables by using the recipe with step_dummy (to change the type of categorical variable to dummy), step_nomalize  ( to scale and center the numeric predictors to recieve the mean=0 and std=1) and step_pca to prepare the data. Then, I plot 10 most important variables of first four components, using the tidy, group_by, top_n, ungroup, filter, ggplot, geom_col, facet_wrap functions.
+
+```{r}
+vgsales_pca <- recipe(NA_Sales~. ,data= vgsales) %>%
+  step_dummy(Genre,Platform)%>%
+  step_normalize(all_numeric_predictors())%>%
+  step_pca(all_numeric_predictors(),num_comp = 6)%>%
+  prep()
+vgsales_pca
+```
+
+```{r}
+library(forcats)
+tidy( vgsales_pca, 3 ) %>%
+  dplyr::mutate( component = fct_inorder( component ) ) %>% 
+  group_by( component ) %>% 
+  top_n(10, wt = abs( value ) ) %>%  # Let's look at the top 6 variables for each component
+  ungroup() %>% 
+  dplyr::filter( component %in% c("PC1", "PC2", "PC3", "PC4") ) %>% 
+  ggplot( aes( x = value, y = terms, fill = terms ) ) +
+  geom_col( show.legend = FALSE ) +
+  facet_wrap( ~component, scales = "free_y" )+
+  labs(caption = "Figure 5: PCA loadins for the first four components.")+
+  theme(plot.caption = element_text(hjust = 0, size = 14))
+```
+
+PCA plot looks like:
+
+EU_Sale and Other_Sale are the most important in the first component. 
+
+Platform-DS and JP-Sales are the most important in the second component.
+
+Platform-DS and Genre-Misc are the most important in the third component.
+
+Platform-PC and Genre-strategy are the most important in the fourth component.
+
+It seems make sense  based on the plots in previous section.
+
+```{r}
+vgsales_pca_components <- juice(vgsales_pca)
+
+vgsales_pca_components %>%
+  dplyr::select(NA_Sales,PC1:PC4)%>%
+  head()
+
+vgsales_pca_components %>% 
+  dplyr::select( NA_Sales, PC1:PC4 ) %>% 
+  GGally::ggpairs( columns = 2:4, 
+                   progress = FALSE )
+```
+
+It looks there is not any separation and relation between first four components that is disappointing.
+
+```{r}
+#proportion of variation explained by components.
+sdev<-vgsales_pca$step[[3]]$res$sdev
+ve<- sdev^2/sum(sdev^2)
+pc_pve <- tibble(pc=fct_inorder(unique(tidy(vgsales_pca,3)$component)),
+                 pve=cumsum(ve))
+kable(head(pc_pve),caption = "Table 5. A table of 5 first PVE for each component")
+kable(tail(pc_pve,10),caption = "Table 5. A table of 10 last PVE for each component")
+```
+
+Therefore, with four first PCA we just look at the less than 15% of variations in the data and to explain the min 90% of variations we should consider 36 principal component.Then PCA just reduced the dimension by 8 from 44 in total then it is not worthwhile.
+
+#### 2.4. The plots of predictors variable vs.outcome variable:
+#### 2.4a. Pair-wise plot of vgsales data set:
+I produce the pair-wise plot of numeric variables using select and GGally::ggpairs functions.
+
+```{r}
+vgsales %>% 
+  dplyr::select(NA_Sales:Other_Sales)%>%
+  GGally::ggpairs(columns=1:4,
+                  progress=FALSE)+
+  labs(caption = "Figure 6: A pair-wise plot of numerical variables for the vgsales data .")+
+  theme(plot.caption = element_text(hjust = 0, size = 12))
+```
+
+There are linear relationship between North America sales vs. Europe sales, Japan sales and other countries sales (numeric predictors).
+
+#### 2.4b. The box plot of Genre vs. NA_Sales:
+I use the mutate, ggplot,geom_box functions to produce the box plot of Genre vs. NA_Sales.
+
+```{r}
+vgsales%>%
+  dplyr::mutate(Genre=fct_reorder( Genre,NA_Sales))%>%
+  ggplot(aes(y=Genre,x=NA_Sales))+
+  geom_boxplot()+
+  labs(caption = "Figure 7: The box plot of Genre vs. NA_Sales")+
+  theme(plot.caption = element_text(hjust = 0, size = 12))
+
+```
+
+The distribution of Platform, Shooter and Sports genres are the most and there are a lot of outliers in each genre.
+
+#### 2.4c. The box plot of Platform vs. NA_Sales:
+I use the mutate, ggplot,geom_point functions to produce the box plot of Year vs. NA_Sales.
+
+```{r}
+vgsales%>%
+  dplyr::mutate(Platform=fct_reorder( Platform,NA_Sales))%>%
+  ggplot(aes(y=Platform,x=NA_Sales))+
+  geom_boxplot()+
+  labs(caption = "Figure 8: The box plot of Year variables for the vgsales data .")+
+  theme(plot.caption = element_text(hjust = 0, size = 12))
+```
+
+The distribution of GEN, GB and NES platforms are the most and there are a lot of outliers in each platform.
+
+#### 2.5. : The relationships between the response vaiable and the numeric variables:
+There are linear relationship between North America sales vs. Europe sales, Japan sales and other countries sales (numeric predictors). The correlation of North America sales vs. Europe sales is 0.768 (high correlation), the correlation of North America sales vs. Japan sales is 0.45 (moderate correlation) and North America sales vs. Other countries is 0.635 (high correlation). they look great.
+
+Also there are some correlations between predictors that is not good but we will make the lasso regression and random forest models that these correlations will not affect too much on them.
+
+### 3. Preprocessing:
+#### 3.1. Split the data
+I set a seed  for reproducibility, then I  use initial_split function to split a data set to 2 parts and with training and testing functions I assign the first part (contains 3/4 of total observations) to training set and the second part(contains 1/4 of total observations) to testing set. Also **I don't use any variable to stratify**.
+
+```{r}
+#set the seed to reproducibility
+set.seed(1223)
+#split the data set to training and testing sets
+vgsales_split <- initial_split(vgsales)
+vgsales_split
+vgsales <- training(vgsales_split)
+vgsales_test <- testing(vgsales_split)
+```
+
+**12448 observations are in the training set and 4150 observations are in the testing set** and there are 16598 observations in total.
+
+#### 3.2. Removing variables that could lead to overfitting:
+I use the select function to select the variables that they should remain in the training set then I use the skim function on the training set to check it works.
+
+```{r}
+# remove the 'Name' variable from training set
+vgsales <- vgsales %>%
+  dplyr::select(Platform:Other_Sales)
+#skim the data
+skim(vgsales)
+```
+
+In this part I removed the 'Name' variable that is just ID column in my data set and it could lead to over fitting the model.
+
+#### 3.3. Create a recipe:
+At first, I use the recipe function on the model in training set, step_dummy to change the categorical variables to dummy variables,  step_zv on all predictors to remove the variables with zero variance, step_normalize on all nominal predictors to receive the sdv=1 and mean=0 for them and step_corr on all predictors to remove the high correlated predictors.
+
+At last, I get the preprocessed training set by juice function.
+
+```{r}
+vgsales_recipe <- recipe(NA_Sales~.,data=vgsales)%>%
+  step_dummy(all_nominal())%>%
+  step_zv(all_predictors())%>%
+  step_normalize(all_numeric_predictors())%>%
+  step_corr(all_numeric_predictors())%>%
+  prep()
+vgsales_recipe
+vgsales_preproc <- juice(vgsales_recipe)
+vgsales_preproc
+
+```
+
+As we can see, there are 5 predictor and 1 outcome variables with 12448 data points and no missing data, Also, the step_dummy chaneged the Genre and Platform variables from categorical to dummy variables, the step_zv and step_corr didn't remove any variable from the model so there was not any high correlated predictor and there was not any variable with variance of zero, the step_normalize scaled and centered some variables such as EU_Sales, JP_Sales, Other_Sales, Platform_X3DO, Platform_X3DS, Platform_DC, Platform_DS and Platform_GB to receive the mean =1 and std=1.
+
+### 4. Model fitting :
+#### 4.1.:Outline of the  model-fitting:
+In this part, I investigate Lasso regression and Random forest models to find the best one based on the metrics. I use set.seed function to be sure about the reproducibility.
+
+```{r}
+set.seed(1988)
+```
+
+#### 4.2a. Tuning:
+To tun the models, I get 10 bootstraps of the data by using the bootstraps function and without any strata data because in preprocessing part I change the categorical variables to dummy variables.
+
+```{r}
+vgsales_boots <- bootstraps(vgsales_preproc,times=10)
+vgsales_boots
+```
+
+#### 4.2b. Lasso regresion model:
+At first by using linear_reg and set_engine functions I fit the lasso regression model with arguments mixture=1, mode of regression, glmnet engine and **tuning the penalty argument**. Also I make a 50 level of grid by grid_regular function and after set the seed for reproduceability, with tune_grid, collect_metrics, ggplot, geom_line, facet_wrap functions I show the Lasso regression metrics for different penalty parameters, then by select best and final_model functions I find the best penalty anf finalise the model with that.
+
+```{r}
+lasso_spec <- linear_reg(mode="regression", penalty=tune(),mixture=1)%>%
+  set_engine("glmnet")
+penalty_grid <-grid_regular(penalty(),
+                            levels=50)
+penalty_grid
+set.seed(2020)
+lasso_grid <- tune_grid(lasso_spec,
+                        NA_Sales~.,
+                        resamples=vgsales_boots,
+                        grid=penalty_grid)
+```
+
+```{r}
+lasso_grid %>%
+  collect_metrics()%>%
+  ggplot(aes(penalty, mean, color=.metric))+
+  geom_line()+
+  facet_wrap(~.metric,scales="free",nrow = 2)+
+  labs(caption = "Figure 9: Lasso regression metrics for different penalty parameters")+
+  theme(plot.caption = element_text(hjust = 0, size = 12))
+```
+
+As shown in the plot, there is absolute drop in RSQ and rise in RMSE. let's see what penalty gives the best RMSE for our model.
+
+```{r}
+best_lasso_rmse <- select_best(lasso_grid,"rmse")
+kable(best_lasso_rmse,caption = "Table 6. A table of penalty based on best RMSE")
+
+final_lasso<- finalize_model(lasso_spec, best_lasso_rmse)
+final_lasso
+```
+
+Then penalty=5.179e-5 give the best RMSE and finalize our model with that.
+
+#### 4.3. Random forest model:
+I fit the Random forest model with tuning the mtry and min_n arguments by using the rand_forest, set_engine, grid_regular, tune_grid, collect_metrics, mutate, ggplot. geom_point, geom_line, facet_wrap, select_best, finalize_model functions.
+
+```{r}
+rf_spec <- rand_forest(mode="regression", 
+                       mtry=tune(), 
+                       trees = 100, 
+                       min_n = tune())%>%
+  set_engine("ranger", importance="permutation")
+rand_spec_grid <- grid_regular( 
+  dials::finalize( mtry(), 
+            vgsales_preproc %>% 
+              dplyr::select( - NA_Sales) ),
+  min_n(),
+  levels = 5 )
+rand_spec_grid
+doParallel::registerDoParallel() # This will make it run faster on a Mac
+set.seed( 1959 )
+rf_grid <- tune_grid( rf_spec, 
+                      recipe(NA_Sales ~ .,data=vgsales_preproc),
+                      resamples = vgsales_boots,
+                      grid = rand_spec_grid )
+```
+
+```{r}
+rf_grid %>%
+  collect_metrics()%>%
+  dplyr::mutate(min_n=as.factor(min_n))%>%
+  ggplot(aes(x=mtry, y=mean,colour=min_n))+
+  geom_point(size=2)+
+  geom_line(alpha=0.75)+
+  facet_wrap(~.metric, scales="free",nrow=2)+
+  labs(caption = "Figure 10: Random forest metrics for different parameter value-regression")+
+  theme(plot.caption = element_text(hjust = 0, size = 12))
+```
+
+According to the plot of random forest metrics, it look like min-n=2 and mtry=22 give the best RMSE. I fit the final model base the best RMSE.
+
+```{r}
+best_rf_rmse<- select_best(rf_grid,"rmse") 
+kable(best_rf_rmse,caption = "Table 7. A table of MTRY and min-n based on best RMSE")
+
+final_rf<- finalize_model(rf_spec,best_rf_rmse)
+final_rf
+```
+
+#### 4.4. Model selection by cross-validation
+I set the seed at first then with 10 fold of cross validation method and using the vfold_cv, fit_resamples and collect_metrics functions I try to find the best model. 
+
+```{r}
+# set the seed
+set.seed( 1967 )
+# cross-validation
+vgsales_cv <- vfold_cv( vgsales_preproc, v = 10 )
+#4.3a. lasso regression
+lasso_cv <- fit_resamples(final_lasso, NA_Sales~.,
+                          resamples=vgsales_cv)
+lasso_cv %>%
+  collect_metrics()
+
+#4.3b. random forest
+set.seed(780)
+rf_cv <-fit_resamples(final_rf, NA_Sales~.,
+              resamples=vgsales_cv)
+rf_cv_metric <- rf_cv %>%
+  collect_metrics()
+#tables
+kable(best_rf_rmse,caption = "Table 8. A table of metrics of lasso regression model")
+kable(rf_cv_metric,caption = "Table 9. A table of metrics of random forest model")
+```
+
+The metrics of lasso regression are RMSE=0.494 and RSQ= 0.611 that is particularly good and the metric of random forest are RMSE=0.434 and RSQ=0.738 that looks great.
+
+
+#### 4.5. Model selection:
+Based on the metrics of lasso regression and random forest we can see the RMSE decreased by 0.06 and RSQ increased by 0.127 in random forest, which is great. then random forest is the best.
+
+### 5. Model evaluation:
+#### 5.1. Evaluation process to chosen the model:
+In this step, I finally fit the random forest model to get the predictions, I will look at the most important predictors by VIP plot and get the predictions from testing set and compare them with truth by scatter plot. Also I try to get the metrics to see how well the model works on predictions. At last I will predict the Europe sales for the Fatal Empire.
+
+#### 5.2. The most important predictors of the model:
+I use the fit function to fit the random forest model on my prepossessed training set and with vip function I try to show the most important variables in VIP plot.
+
+```{r}
+set.seed(1224)
+vgsales_rf <- final_rf%>%
+  fit(NA_Sales~., data=vgsales_preproc)
+vgsales_rf%>%
+  vip()+
+  labs(caption = "Figure 11: VIP plot for the vgsales random forest")+
+  theme(plot.caption = element_text(hjust = 0, size = 12))
+```
+
+Other world sales, Europe sales, Japan sales, Platform-PC, Platform-NES are five most important predictors based on the VIP plot.
+
+#### 5.3.  The plot of predictions against truth:
+I bake my prepossessed testing set by bake function then I use the predict and bind-cols functions to show the prediction and truth in a table. At last I show them by scatter plot using ggplot, geom_point, geom_abline functions. If they lie along a line y=x, we can say the model predict good.
+
+```{r}
+vgsales_test_preproc<- bake(vgsales_recipe,vgsales_test)
+vgsales_test_preproc
+
+vgsales_preds<- predict(vgsales_rf,
+                        new_data=vgsales_test_preproc)%>%
+  bind_cols(vgsales_test_preproc%>%
+              dplyr::select(NA_Sales))
+vgsales_preds
+
+vgsales_preds%>%
+  ggplot(aes(x=.pred,y=NA_Sales))+
+  geom_point()+
+  geom_abline(intercept=0,slope=1,colour="red")+
+  theme_minimal()+
+  labs(caption = "Figure 12: Scatter plot of the truth vs. the predicted values.")+
+  theme(plot.caption = element_text(hjust = 0, size = 12))
+```
+
+The most points are no lie along the line y=x that means we will predict some time more and some times less than before.
+
+#### 5.4. The table of RMSE and RSQ:
+I make a table of metrics based on the predictions by metrics function.
+
+```{r}
+vgsales_preds_table<- vgsales_preds%>%
+  metrics(truth=NA_Sales,estimate=.pred)
+kable(vgsales_preds_table, caption = "Table 10. Table of RMSE and RSQ")
+```
+
+The RMSE is 0.412 and lower than cross validated RMSE that is good, also RSQ is 0.717 and lower than the cross validated RSQ. The RMSE decreased by 0.022 and RSQ decreased by 0.021 that is not too far from our cross validated RMSE.
+
+#### 5.5a.Summeries of important predictor and how well our model will predict:
+Based on our VIP plot our most important predictors are Other world sales, Europe sales, Japan sales. Also, according to the predicted RMSE and RSQ that are less than the cross validation' RMSE and RSQ our model will not work as well as we expect. Random sampling in cross validated RMSE lead to this case but it is not important because this was just the estimate. on the other hand, the training set is only a sample of data set and it doesn't represent the entire data set, hence when testing set is very different of the training set the cross validated RMSE could not present how our model will predict on the testing set. 
+
+#### 5.4b. Predicting the Fatal Empire sales in North America:
+I make a table of Fatal Empire's information by tibble function then I bake them with bake function and by using the predict function I try to predict the North America's sales.
+
+```{r}
+Fatal_info <- tibble(
+  Platform='PS4',
+  Genre='Role-Playing',
+  JP_Sales=2.58,
+  EU_Sales=0.53,
+  Other_Sales=0.1)
+kable(Fatal_info,caption = "Table 11. A table of Fatal Empire information")
+  
+vgsales_Fatal_preproc<- vgsales_recipe %>%
+  bake(Fatal_info)
+vgsales_Fatal_preds <- predict(vgsales_rf,
+                               new_data=vgsales_Fatal_preproc)
+vgsales_Fatal_preds
+```
+
+Based on our prediction random forest model the number of sales in North America will be 1.22 million.   
+
+
+### Refrences:
+
+1. Exploratory Data Analysis (EDA) - A step by step guide, crown iconVishesh Arora - Published On May 20, 2021 and Last Modified On July 22nd, 2022, https://www.analyticsvidhya.com/blog/2021/05/exploratory-data-analysis-eda-a-step-by-step-guide/#:~:text=EDA%20is%20the%20process%20of,to%20understand%20the%20data%20better.
+
+
+
+### The end
+
