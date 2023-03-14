@@ -1,6 +1,6 @@
 ---
-title: "Assessment3- vgsales Case Study and Data Analysis"
-author: 'Zahra Ahmadpour(a1863476)'
+title: "vgsales Case Study and Data Analysis"
+author: 'Zahra Ahmadpour'
 date: "04/12/2022"
 output:
   html_document: default
